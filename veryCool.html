@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fluid Wavy Mandala Arms</title>
+  <style>
+    body { margin: 0; overflow: hidden; background-color: black; }
+    canvas { display: block; touch-action: none; }
+  </style>
+</head>
+<body>
+<canvas id="patternCanvas"></canvas>
+<script>
+  let canvas, ctx;
+  const numShapes = 1; // Single mandala for clarity
+  const shapes = [];
+  let time = 0;
+
+  const colors = [
+    "hsl(0, 100%, 50%)", "hsl(40, 100%, 50%)", "hsl(120, 100%, 50%)",
+    "hsl(200, 100%, 50%)", "hsl(280, 100%, 50%)", "hsl(340, 100%, 50%)"
+  ];
+
+  function setupCanvas() {
+    canvas = document.getElementById("patternCanvas");
+    ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    initializeShapes();
+  }
+
+  function seededRandom(seed) {
+  let s = seed % 2147483647; // Use a large prime number
+  if (s <= 0) s += 2147483646;
+  return function () {
+    s = (s * 16807) % 2147483647; // Lehmer RNG
+    return (s - 1) / 2147483646;
+  };
+}
+
+
+  function initializeShapes() {
+    const random = seededRandom(Date.now()); // Unique seed per reload
+    shapes.length = 0;
+    const maxRadius = Math.min(canvas.width, canvas.height) / 4;
+
+    for (let i = 0; i < numShapes; i++) {
+      shapes.push({
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: maxRadius,
+        symmetry: 12, // Number of arms
+        lineDensity: 10,
+        color: colors[Math.floor(random() * colors.length)],
+        arms: Array.from({ length: 12 }, () => ({
+          baseAmplitude: random() * 200 + 300,   // Random wave amplitude
+          frequency: random() * 0.01 + 0.005, // Random wave frequency
+          waveSpeed: random() * 0.02 + 0.005,  // Unique wave speed
+          phaseOffset: random() * Math.PI * 2, // Unique phase offset
+          stretchSpeed: random() * 0.01 + 0.005, // Stretch/retract speed
+          maxLength: random() * 300 + 300,    // Maximum length of the arm
+          currentLength: random() * 10 + 300, // Start length
+          retracting: random() > 0.5 ? true : false // Random retract/extend
+        }))
+      });
+    }
+  }
+
+  function drawMandala(shape) {
+    const { x, y, radius, symmetry, color, arms } = shape;
+
+    ctx.save();
+
+    // Make the tornado move around the canvas
+    const tornadoX = x + Math.sin(time * 0.005) * 100;
+    const tornadoY = y + Math.cos(time * 0.005) * 50;
+    ctx.translate(tornadoX, tornadoY);
+
+    for (let i = 0; i < symmetry; i++) {
+        const arm = arms[i];
+        const baseAngle = (i / symmetry) * Math.PI * 2 + time * 0.00009; // Spin the tornado
+
+        ctx.save();
+        ctx.rotate(baseAngle);
+
+        const arcSpacing = 15; // Control spacing between arcs
+        const numArcs = Math.floor(arm.currentLength / arcSpacing);
+
+        for (let j = 0; j < numArcs; j++) {
+            const progress = j / numArcs; // Progress along the arm
+            const segmentPhase = time * arm.waveSpeed + j * 0.1 + arm.phaseOffset;
+            const waveOffset = Math.sin(segmentPhase) * arm.baseAmplitude;
+
+            // Perpendicular wave for dynamic twisting
+            const perpWave = Math.cos(segmentPhase * 0.7) * (10 + progress * 90);
+
+            // Adjust thickness based on progress (thinner at the base)
+            const thickness = 5 + progress * 20;
+
+            // Position each arc with tapering
+            const segmentSpacing = 1; // Distance between arcs
+            const segmentDistance = j * segmentSpacing * (1 + progress); // Stretch towards the top
+
+            const gradient = ctx.createLinearGradient(
+                -segmentDistance,
+                0,
+                segmentDistance,
+                0
+            );
+
+            // Dynamic pulsing gradient
+            const gradientOffset = (Math.sin(time * 0.01 + j * 0.5) + 1) / 6;
+            gradient.addColorStop(Math.max(0, gradientOffset - 0.3), "rgba(255, 255, 255, 0.3)");
+            gradient.addColorStop(gradientOffset, color);
+            gradient.addColorStop(Math.min(1, gradientOffset + 0.3), "rgba(255, 255, 255, 0.3)");
+
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = thickness;
+
+            // Draw arc with waving offset
+            ctx.beginPath();
+            ctx.arc(perpWave, segmentDistance + waveOffset, 10, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
+    ctx.restore();
+}
+
+
+  function updateShapes() {
+    for (const shape of shapes) {
+      for (const arm of shape.arms) {
+        if (arm.retracting) {
+          arm.currentLength -= arm.stretchSpeed; // Retract arm
+          if (arm.currentLength <= 50) arm.retracting = false; // Switch to extending
+        } else {
+          arm.currentLength += arm.stretchSpeed; // Extend arm
+          if (arm.currentLength >= arm.maxLength) arm.retracting = true; // Switch to retracting
+        }
+      }
+    }
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    updateShapes();
+
+    for (const shape of shapes) {
+      drawMandala(shape);
+    }
+
+    time += 1;
+    requestAnimationFrame(animate);
+  }
+
+  window.addEventListener("load", () => {
+    setupCanvas();
+    animate();
+  });
+
+  window.addEventListener("resize", () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    initializeShapes();
+  });
+</script>
+</body>
+</html>
