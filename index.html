@@ -1,172 +1,209 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fluid Wavy Mandala Arms</title>
-  <style>
-    body { margin: 0; overflow: hidden; background-color: black; }
-    canvas { display: block; touch-action: none; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blockchain Asset Scanner</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        input[type="number"], input[type="text"], button {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+        }
+
+        button {
+            cursor: pointer;
+            background-color: #007BFF;
+            color: #fff;
+            border: none;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            max-width: 100%;
+            padding-bottom: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            font-size: 14px;
+            table-layout: auto;
+        }
+
+        table, th, td {
+            border: 1px solid #ccc;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: center;
+            word-wrap: break-word;
+            max-width: 150px;
+        }
+    </style>
 </head>
+
 <body>
-<canvas id="patternCanvas"></canvas>
+
+<div class="container">
+    <h1>Blockchain Asset Scanner</h1>
+
+    <label for="apiKey">Blockfrost API Key:</label>
+    <input type="text" id="apiKey" placeholder="Enter your Blockfrost API Key">
+    <button onclick="nextProperty('policyId')">↓</button>
+
+    <label for="policyId">Policy ID:</label>
+    <input type="text" id="policyId" placeholder="Enter Policy ID">
+    <button onclick="nextProperty('address')">↓</button>
+
+    <label for="address">Wallet Address:</label>
+    <input type="text" id="address" placeholder="Enter Wallet Address">
+    <button onclick="nextProperty('propertyCount')">↓</button>
+
+    <label for="propertyCount">Property Count (1–20):</label>
+    <input type="number" id="propertyCount" min="1" max="20">
+    <button id="generateProperties">Generate Properties</button>
+
+    <div id="propertiesAccordion"></div>
+
+    <div id="resultsTable"></div>
+    <button onclick="exportToExcel()">Export as Excel</button>
+    <button onclick="exportToText()">Export as Text</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
 <script>
-  let canvas, ctx;
-  const numShapes = 1; // Single mandala for clarity
-  const shapes = [];
-  let time = 0;
+    let BLOCKFROST_API_KEY = '';
+    const BLOCKFROST_ENDPOINT = 'https://cardano-mainnet.blockfrost.io/api/v0';
 
-  const colors = [
-    "hsl(0, 100%, 50%)", "hsl(40, 100%, 50%)", "hsl(120, 100%, 50%)",
-    "hsl(200, 100%, 50%)", "hsl(280, 100%, 50%)", "hsl(340, 100%, 50%)"
-  ];
+    function nextProperty(id) {
+        document.getElementById(id).focus();
+    }
 
-  function setupCanvas() {
-    canvas = document.getElementById("patternCanvas");
-    ctx = canvas.getContext("2d");
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    initializeShapes();
-  }
+    document.getElementById('generateProperties').addEventListener('click', () => {
+        const count = parseInt(document.getElementById('propertyCount').value);
+        const accordion = document.getElementById('propertiesAccordion');
+        accordion.innerHTML = '';
 
-  function seededRandom(seed) {
-  let s = seed % 2147483647; // Use a large prime number
-  if (s <= 0) s += 2147483646;
-  return function () {
-    s = (s * 16807) % 2147483647; // Lehmer RNG
-    return (s - 1) / 2147483646;
-  };
+        for (let i = 1; i <= count; i++) {
+            accordion.innerHTML += `
+                <div>
+                    <label>Property ${i}</label>
+                    <input type="text" id="property${i}" placeholder="Enter Property ${i}">
+                    <button onclick="${i < count ? `nextProperty('property${i + 1}')` : 'searchAssets()'}">
+                        ${i < count ? '↓' : '🔍'}
+                    </button>
+                </div>
+            `;
+        }
+    });
+
+    async function getStakeAddress(paymentAddress) {
+        const response = await fetch(`${BLOCKFROST_ENDPOINT}/addresses/${paymentAddress}`, {
+            headers: { 'project_id': BLOCKFROST_API_KEY }
+        });
+        const data = await response.json();
+        return data.stake_address;
+    }
+
+    async function fetchAllUtxos(stakeAddress) {
+        let page = 1;
+        let allUtxos = [];
+
+        while (true) {
+            const response = await fetch(`${BLOCKFROST_ENDPOINT}/accounts/${stakeAddress}/utxos?page=${page}`, {
+                headers: { 'project_id': BLOCKFROST_API_KEY }
+            });
+            const utxos = await response.json();
+            if (!utxos.length) break;
+            allUtxos = allUtxos.concat(utxos);
+            page++;
+        }
+        return allUtxos;
+    }
+
+    async function searchAssets() {
+        BLOCKFROST_API_KEY = document.getElementById('apiKey').value.trim();
+        const policyId = document.getElementById('policyId').value.trim();
+        const paymentAddress = document.getElementById('address').value.trim();
+        const stakeAddress = await getStakeAddress(paymentAddress);
+        const utxos = await fetchAllUtxos(stakeAddress);
+        const properties = Array.from({ length: parseInt(document.getElementById('propertyCount').value) }, (_, i) => document.getElementById(`property${i + 1}`).value.trim());
+
+        let resultHTML = `<table><tr><th>Asset Name</th>${properties.map(p => `<th>${p}</th>`).join('')}</tr>`;
+
+        for (const utxo of utxos) {
+            for (const asset of utxo.amount) {
+                if (asset.unit.startsWith(policyId)) {
+                    const response = await fetch(`${BLOCKFROST_ENDPOINT}/assets/${asset.unit}`, {
+                        headers: { 'project_id': BLOCKFROST_API_KEY }
+                    });
+                    const data = await response.json();
+                    const metadata = data.onchain_metadata || {};
+                    const assetName = metadata.name || hexToString(asset.unit.slice(56));
+                    resultHTML += `<tr><td>${assetName}</td>${properties.map(p => `<td>${metadata[p] || 'N/A'}</td>`).join('')}</tr>`;
+                }
+            }
+        }
+        resultHTML += `</table>`;
+        document.getElementById('resultsTable').innerHTML = resultHTML;
+    }
+
+    function hexToString(hex) {
+        return decodeURIComponent(hex.replace(/(..)/g, '%$1'));
+    }
+
+    function exportToExcel() {
+    const wb = XLSX.utils.table_to_book(document.querySelector('#resultsTable table'));
+    XLSX.writeFile(wb, 'AssetData.xlsx');
 }
 
-
-  function initializeShapes() {
-    const random = seededRandom(Date.now()); // Unique seed per reload
-    shapes.length = 0;
-    const maxRadius = Math.min(canvas.width, canvas.height) / 4;
-
-    for (let i = 0; i < numShapes; i++) {
-      shapes.push({
-        x: canvas.width / 2,
-        y: canvas.height / 2,
-        radius: maxRadius,
-        symmetry: 12, // Number of arms
-        lineDensity: 10,
-        color: colors[Math.floor(random() * colors.length)],
-        arms: Array.from({ length: 12 }, () => ({
-          baseAmplitude: random() * 200 + 300,   // Random wave amplitude
-          frequency: random() * 0.01 + 0.005, // Random wave frequency
-          waveSpeed: random() * 0.02 + 0.005,  // Unique wave speed
-          phaseOffset: random() * Math.PI * 2, // Unique phase offset
-          stretchSpeed: random() * 0.01 + 0.005, // Stretch/retract speed
-          maxLength: random() * 300 + 300,    // Maximum length of the arm
-          currentLength: random() * 10 + 300, // Start length
-          retracting: random() > 0.5 ? true : false // Random retract/extend
-        }))
-      });
-    }
-  }
-
-  function drawMandala(shape) {
-    const { x, y, radius, symmetry, color, arms } = shape;
-
-    ctx.save();
-
-    // Make the tornado move around the canvas
-    const tornadoX = x + Math.sin(time * 0.005) * 100;
-    const tornadoY = y + Math.cos(time * 0.005) * 50;
-    ctx.translate(tornadoX, tornadoY);
-
-    for (let i = 0; i < symmetry; i++) {
-        const arm = arms[i];
-        const baseAngle = (i / symmetry) * Math.PI * 2 + time * 0.00009; // Spin the tornado
-
-        ctx.save();
-        ctx.rotate(baseAngle);
-
-        const arcSpacing = 15; // Control spacing between arcs
-        const numArcs = Math.floor(arm.currentLength / arcSpacing);
-
-        for (let j = 0; j < numArcs; j++) {
-            const progress = j / numArcs; // Progress along the arm
-            const segmentPhase = time * arm.waveSpeed + j * 0.1 + arm.phaseOffset;
-            const waveOffset = Math.sin(segmentPhase) * arm.baseAmplitude;
-
-            // Perpendicular wave for dynamic twisting
-            const perpWave = Math.cos(segmentPhase * 0.7) * (10 + progress * 90);
-
-            // Adjust thickness based on progress (thinner at the base)
-            const thickness = 5 + progress * 20;
-
-            // Position each arc with tapering
-            const segmentSpacing = 1; // Distance between arcs
-            const segmentDistance = j * segmentSpacing * (1 + progress); // Stretch towards the top
-
-            const gradient = ctx.createLinearGradient(
-                -segmentDistance,
-                0,
-                segmentDistance,
-                0
-            );
-
-            // Dynamic pulsing gradient
-            const gradientOffset = (Math.sin(time * 0.01 + j * 0.5) + 1) / 6;
-            gradient.addColorStop(Math.max(0, gradientOffset - 0.3), "rgba(255, 255, 255, 0.3)");
-            gradient.addColorStop(gradientOffset, color);
-            gradient.addColorStop(Math.min(1, gradientOffset + 0.3), "rgba(255, 255, 255, 0.3)");
-
-            ctx.strokeStyle = gradient;
-            ctx.lineWidth = thickness;
-
-            // Draw arc with waving offset
-            ctx.beginPath();
-            ctx.arc(perpWave, segmentDistance + waveOffset, 10, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-
-        ctx.restore();
-    }
-
-    ctx.restore();
+function exportToText() {
+    const textData = document.querySelector('#resultsTable').innerText;
+    const blob = new Blob([textData], { type: 'text/plain' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'AssetData.txt';
+    link.click();
 }
 
-
-  function updateShapes() {
-    for (const shape of shapes) {
-      for (const arm of shape.arms) {
-        if (arm.retracting) {
-          arm.currentLength -= arm.stretchSpeed; // Retract arm
-          if (arm.currentLength <= 50) arm.retracting = false; // Switch to extending
-        } else {
-          arm.currentLength += arm.stretchSpeed; // Extend arm
-          if (arm.currentLength >= arm.maxLength) arm.retracting = true; // Switch to retracting
-        }
-      }
-    }
-  }
-
-  function animate() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    updateShapes();
-
-    for (const shape of shapes) {
-      drawMandala(shape);
-    }
-
-    time += 1;
-    requestAnimationFrame(animate);
-  }
-
-  window.addEventListener("load", () => {
-    setupCanvas();
-    animate();
-  });
-
-  window.addEventListener("resize", () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    initializeShapes();
-  });
 </script>
+
 </body>
 </html>
