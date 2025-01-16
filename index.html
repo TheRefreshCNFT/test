@@ -83,9 +83,9 @@
 <div class="container">
     <h1>Blockchain Asset Scanner</h1>
 
-    <label for="apiKey">Blockfrost API Key:</label>
+  <!--  <label for="apiKey">Blockfrost API Key:</label>
     <input type="text" id="apiKey" placeholder="Enter your Blockfrost API Key">
-    <button onclick="nextProperty('policyId')">↓</button>
+    <button onclick="nextProperty('policyId')">↓</button> -->
 
     <label for="policyId">Policy ID:</label>
     <input type="text" id="policyId" placeholder="Enter Policy ID">
@@ -159,7 +159,7 @@
     }
 
     async function searchAssets() {
-        BLOCKFROST_API_KEY = document.getElementById('apiKey').value.trim();
+        BLOCKFROST_API_KEY = 'mainnetFacOFHKb6AQFIygQqyOz9PIhkjzTPHTR'//document.getElementById('apiKey').value.trim();
         const policyId = document.getElementById('policyId').value.trim();
         const paymentAddress = document.getElementById('address').value.trim();
         const stakeAddress = await getStakeAddress(paymentAddress);
